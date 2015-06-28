@@ -10,6 +10,7 @@ Module Ising
 	integer,parameter :: nflips=1  ! how many site flip every step
 	integer :: flip(3,nflips)      ! flip site index xyz
 	real(kind=r8) :: energy        ! every step energy
+	integer :: ordpara             ! every step order parameter
 
 	contains
 
@@ -60,47 +61,15 @@ subroutine RandFlip
 
 	implicit none
 
-	integer :: i
+	integer :: methoduni
 
-	real(kind=r8) :: deltax,deltay,deltaz,random
-	integer :: index1
+	methoduni=VSL_RNG_METHOD_UNIFORM_STD
 	
-	deltax=1.0D0/nx
-	deltay=1.0D0/ny
-	deltaz=1.0D0/nz
-
-	do i=1,nflips,1
-		call random_number(random)
-		index1=FLOOR(random/deltax)+1
-		if(index1>nx) then
-			write(*,*) "========="
-			write(*,*) "index1>nx"
-			write(*,*) "========="
-			stop
-		end if
-		flip(1,i)=index1
-
-		call random_number(random)
-		index1=FLOOR(random/deltay)+1
-		if(index1>ny) then
-			write(*,*) "========="
-			write(*,*) "index1>ny"
-			write(*,*) "========="
-			stop
-		end if
-		flip(2,i)=index1
-
-		call random_number(random)
-		index1=FLOOR(random/deltaz)+1
-		if(index1>nz) then
-			write(*,*) "========="
-			write(*,*) "index1>nz"
-			write(*,*) "========="
-			stop
-		end if
-		flip(3,i)=index1
-	end do
-	return
+	! [1,nx+1)
+	errcode = virnguniform(methoduni,stream,nflips,flip(1,:),1,nx+1)
+	errcode = virnguniform(methoduni,stream,nflips,flip(2,:),1,ny+1)
+	errcode = virnguniform(methoduni,stream,nflips,flip(3,:),1,nz+1)
+return
 
 end subroutine RandFlip
 
@@ -171,23 +140,29 @@ subroutine Metropolis(deltaE)
 	real(kind=r8) :: deltaE
 	
 	! local 
-	real(kind=r8) :: expnegTE,random
+	real(kind=r8) :: expnegTE,random(1)
 	logical :: ifaccept
 	integer :: i
+	integer :: methoduni
 
 	ifaccept=.false.
 	if(deltaE<0.0D0) then
 		ifaccept=.true.
 	else
 		expnegTE=exp(-1.0D0/temperature*deltaE)  ! exp^(-beta*deltaE)
-		call random_number(random)
-		if(random<expnegTE) then
+		methoduni=VSL_RNG_METHOD_UNIFORM_STD_ACCURATE
+		errcode = vdrnguniform(methoduni,stream,1,random,0.0D0,1.0D0)
+		if(random(1)<expnegTE) then
 			ifaccept=.true.
 		end if
 	end if
 
 	if(ifaccept==.true.) then
 		energy=energy+deltaE
+		! update the ordpara
+		do i=1,nflips,1
+			ordpara=ordpara+sz(flip(1,i),flip(2,i),flip(3,i))*2
+		end do
 	else
 		! recover the last step sz
 		do i=1,nflips,1
@@ -210,6 +185,7 @@ subroutine CalcEnergy(szlocal)
 	integer(kind=i1) :: szlocal(nx,ny,nz)
 
 	energy=0.0D0
+	ordpara=0
 
 	do iz=1,nz,1
 	do iy=1,ny,1
@@ -233,6 +209,7 @@ subroutine CalcEnergy(szlocal)
 		if(periodx==1 .and. ix==nx) then
 			energy=energy+couplingJ*DBLE(szlocal(nx,iy,iz)*szlocal(1,iy,iz))
 		end if
+		ordpara=szlocal(ix,iy,iz)+ordpara
 	end do
 	end do
 	end do
@@ -251,13 +228,15 @@ subroutine RandomCond(szlocal,mx,my,mz)
 	integer :: mx,my,mz
 	integer(kind=i1) szlocal(mx,my,mz)
 	integer :: ix,iy,iz
-	real(kind=r8) :: random
+	integer(kind=4) :: random(mx,my,mz)
+	integer :: methoduni
 
+	methoduni=VSL_RNG_METHOD_UNIFORM_STD
+	errcode = virnguniform(methoduni,stream,mx*my*mz,random,0,2)
 	do iz=1,mz,1
 	do iy=1,my,1
 	do ix=1,mx,1
-		call random_number(random)
-		if(random>0.5) then
+		if(random(ix,iy,iz)==1) then
 			szlocal(ix,iy,iz)=1
 		else
 			szlocal(ix,iy,iz)=-1
@@ -317,57 +296,88 @@ subroutine StandardIO(istep)
 
 	integer :: istep
 	! local
-	integer :: gap=100
-	character(len=50) :: filename
-	integer :: ordpara
+	integer :: gap=100000000
 	integer :: i,j,k
-	logical :: alive
 	
 	if(mod(istep,gap)==0) then
 		
-		write(filename,'(i3.3,a10)') myid,'energy.tmp'
-		inquire(file=trim(filename),exist=alive)
-		if(alive) then
-			open(unit=101,file=trim(filename),status="old",position="append")
-		else
-			open(unit=101,file=trim(filename),status="replace")
-		end if
 		write(101,*) istep,energy
-		close(101)
-
-		write(filename,'(i3.3,a10)') myid,'config.tmp'
-		inquire(file=trim(filename),exist=alive)
-		if(alive) then
-			open(unit=102,file=trim(filename),status="old",position="append")
-		else
-			open(unit=102,file=trim(filename),status="replace")
-		end if
 		
 		write(102,*) "=============",istep,"=============="
-		ordpara=0
+		do i=1,nx,1
+			write(102,'(20I3)') sz(i,1:20,1)
+		end do
 		do i=1,nz,1
 		do j=1,ny,1
 		do k=1,nx,1
-			ordpara=ordpara+sz(k,j,i)
 			write(102,*) sz(k,j,i)
 		end do
 		end do
 		end do
-		close(102)
-		
-		write(filename,'(i3.3,a11)') myid,'ordpara.tmp'
-		inquire(file=trim(filename),exist=alive)
-		if(alive) then
-			open(unit=103,file=trim(filename),status="old",position="append")
-		else
-			open(unit=103,file=trim(filename),status="replace")
-		end if
 		write(103,*) istep,ordpara
-		close(103)
 	end if
+	
+	! update the laststep ordpara
+	if(istep==nsteps) then
+		laststep_ordpara(ordpara)=laststep_ordpara(ordpara)+1
+	end if
+
+	! average update
+	sum_ordpara(istep)=abs(ordpara)+sum_ordpara(istep)
+	sum_energy(istep)=energy+sum_energy(istep)
+	sum_ordpara2(istep)=ordpara*ordpara+sum_ordpara2(istep)
+	sum_energy2(istep)=energy*energy+sum_energy2(istep)
 
 	return
 end subroutine StandardIO
+
+!================================================
+!================================================
+
+subroutine fileopen
+
+	implicit none
+	character(len=50) :: filename
+	logical :: alive
+
+	write(filename,'(i3.3,a10)') myid,'energy.tmp'
+	inquire(file=trim(filename),exist=alive)
+	if(alive) then
+		open(unit=101,file=trim(filename),status="old",position="append")
+	else
+		open(unit=101,file=trim(filename),status="replace")
+	end if
+
+	write(filename,'(i3.3,a10)') myid,'config.tmp'
+	inquire(file=trim(filename),exist=alive)
+	if(alive) then
+		open(unit=102,file=trim(filename),status="old",position="append")
+	else
+		open(unit=102,file=trim(filename),status="replace")
+	end if
+
+	write(filename,'(i3.3,a11)') myid,'ordpara.tmp'
+	inquire(file=trim(filename),exist=alive)
+	if(alive) then
+		open(unit=103,file=trim(filename),status="old",position="append")
+	else
+		open(unit=103,file=trim(filename),status="replace")
+	end if
+return
+
+end subroutine fileopen
+
+!================================================
+!================================================
+
+subroutine fileclose
+	
+	implicit none
+	close(101)
+	close(102)
+	close(103)
+return
+end subroutine fileclose
 
 !================================================
 !================================================

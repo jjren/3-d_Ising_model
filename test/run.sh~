@@ -1,1 +1,0 @@
-mpirun -gdb -np 2 ../Ising

@@ -26,6 +26,8 @@ subroutine ReadInput
 		read(10,*) initmode
 		read(10,*) couplingJ
 		read(10,*) temperature
+		read(10,*) seed
+		read(10,*) intratrajavera
 		close(10)
 
 		position1=0
@@ -40,6 +42,8 @@ subroutine ReadInput
 		call MPI_PACK(initmode,1,MPI_character,packbuf,packsize,position1,MPI_COMM_WORLD,ierr)
 		call MPI_PACK(couplingJ,1,MPI_real8,packbuf,packsize,position1,MPI_COMM_WORLD,ierr)
 		call MPI_PACK(temperature,1,MPI_real8,packbuf,packsize,position1,MPI_COMM_WORLD,ierr)
+		call MPI_PACK(seed,1,MPI_integer4,packbuf,packsize,position1,MPI_COMM_WORLD,ierr)
+		call MPI_PACK(intratrajavera,1,MPI_integer4,packbuf,packsize,position1,MPI_COMM_WORLD,ierr)
 	end if
 
 	call MPI_BCAST(packbuf,packsize,MPI_PACKED,0,MPI_COMM_WORLD,ierr)
@@ -57,6 +61,8 @@ subroutine ReadInput
 		call MPI_UNPACK(packbuf,packsize,position1,initmode,1,MPI_character,MPI_COMM_WORLD,ierr)
 		call MPI_UNPACK(packbuf,packsize,position1,couplingJ,1,MPI_real8,MPI_COMM_WORLD,ierr)
 		call MPI_UNPACK(packbuf,packsize,position1,temperature,1,MPI_real8,MPI_COMM_WORLD,ierr)
+		call MPI_UNPACK(packbuf,packsize,position1,seed,1,MPI_integer4,MPI_COMM_WORLD,ierr)
+		call MPI_UNPACK(packbuf,packsize,position1,intratrajavera,1,MPI_integer4,MPI_COMM_WORLD,ierr)
 	end if
 
 	! set the local ntrajs
@@ -76,6 +82,8 @@ subroutine ReadInput
 		write(*,*) "number of steps",nsteps
 		write(*,*) "coupling J=",couplingJ
 		write(*,*) "temperature=",temperature
+		write(*,*) "seed=",seed
+		write(*,*) "intratrajavera=",intratrajavera
 		write(*,*) "============================="
 	end if
 	

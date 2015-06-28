@@ -3,6 +3,9 @@ module array_mod
 	implicit none
 
 	integer(kind=i1),allocatable :: szinit(:,:,:),sz(:,:,:)
+	integer(kind=i4),allocatable :: sum_ordpara(:),sum_ordpara2(:)
+	real(kind=r8),allocatable :: sum_energy(:),sum_energy2(:)
+	integer(kind=i4),allocatable :: laststep_ordpara(:)
 
 	contains
 !================================================
@@ -22,7 +25,23 @@ subroutine allocatearray
 	allocate(sz(nx,ny,nz),stat=error)
 	if(error/=0) stop
 	
-	return
+	! average order parameter and energy on every process
+	allocate(sum_ordpara(0:nsteps),stat=error)
+	if(error/=0) stop
+	sum_ordpara=0
+	allocate(sum_ordpara2(0:nsteps),stat=error)
+	if(error/=0) stop
+	sum_ordpara2=0
+	allocate(sum_energy(0:nsteps),stat=error)
+	if(error/=0) stop
+	sum_energy=0.0D0
+	allocate(sum_energy2(0:nsteps),stat=error)
+	if(error/=0) stop
+	sum_energy2=0.0D0
+	allocate(laststep_ordpara(-nx*ny*nz:nx*ny*nz),stat=error)
+	laststep_ordpara=0
+	if(error/=0) stop
+return
 
 end subroutine allocatearray
 
